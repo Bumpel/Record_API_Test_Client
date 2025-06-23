@@ -8,6 +8,9 @@ import io.ktor.serialization.jackson.*
 import com.fasterxml.jackson.databind.*
 import io.ktor.http.*
 
+// BASE_URL Variable - hier können Sie die URL ändern
+const val BASE_URL = "http://127.0.0.1:8100"
+
 data class Album(
     val owner: String,
     val title: String,
@@ -33,8 +36,10 @@ suspend fun main() {
         }
     }
 
+
+
     println("=== Record API Test Client ===")
-    println("Verbindung zu http://127.0.0.1:8100")
+    println("Verbindung zu $BASE_URL")
     println()
 
     while (true) {
@@ -98,7 +103,7 @@ suspend fun createRecord(client: HttpClient) {
     )
 
     try {
-        val response: HttpResponse = client.post("http://127.0.0.1:8100/records") {
+        val response: HttpResponse = client.post("$BASE_URL/records") {
             contentType(ContentType.Application.Json)
             setBody(newAlbum)
         }
@@ -114,7 +119,7 @@ suspend fun getAllRecords(client: HttpClient) {
     println("=== Alle Records abrufen ===")
 
     try {
-        val response: HttpResponse = client.get("http://127.0.0.1:8100/records")
+        val response: HttpResponse = client.get("$BASE_URL/records")
         println("Status: ${response.status}")
         println("Response: ${response.bodyAsText()}")
     } catch (e: Exception) {
@@ -132,7 +137,7 @@ suspend fun getRecordById(client: HttpClient) {
     }
 
     try {
-        val response: HttpResponse = client.get("http://127.0.0.1:8100/records/$id")
+        val response: HttpResponse = client.get("$BASE_URL/records/$id")
         println("Status: ${response.status}")
         println("Response: ${response.bodyAsText()}")
     } catch (e: Exception) {
@@ -172,7 +177,7 @@ suspend fun updateRecord(client: HttpClient) {
     )
 
     try {
-        val response: HttpResponse = client.put("http://127.0.0.1:8100/records/$id") {
+        val response: HttpResponse = client.put("$BASE_URL/records/$id") {
             contentType(ContentType.Application.Json)
             setBody(updatedAlbum)
         }
@@ -204,7 +209,7 @@ suspend fun deleteRecord(client: HttpClient) {
     val owner = readLine() ?: return
 
     try {
-        val response: HttpResponse = client.delete("http://127.0.0.1:8100/records/$id") {
+        val response: HttpResponse = client.delete("$BASE_URL/records/$id") {
             url {
                 parameters.append("owner", owner)
             }
