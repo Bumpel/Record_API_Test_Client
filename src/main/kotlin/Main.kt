@@ -54,7 +54,8 @@ suspend fun main() {
             3 -> getRecordById(client)
             4 -> updateRecord(client)
             5 -> deleteRecord(client)
-            6 -> {
+            6 -> fillDatabaseWithTestData(client)
+            7 -> {
                 println("Auf Wiedersehen!")
                 break
             }
@@ -73,7 +74,8 @@ fun showMenu() {
     println("3. Record nach ID suchen (GET)")
     println("4. Record aktualisieren (PUT)")
     println("5. Record löschen (DELETE)")
-    println("6. Beenden")
+    println("6. Datenbank mit Testdaten füllen")
+    println("7. Beenden")
     println()
 }
 
@@ -227,4 +229,62 @@ suspend fun deleteRecord(client: HttpClient) {
     } catch (e: Exception) {
         println("Fehler beim Löschen: ${e.message}")
     }
+}
+
+suspend fun fillDatabaseWithTestData(client: HttpClient) {
+    println("=== Datenbank mit Testdaten füllen ===")
+
+    val testAlbums = listOf(
+        Album("Max", "The Dark Side of the Moon", "Pink Floyd", 1973),
+        Album("Anna", "Abbey Road", "The Beatles", 1969),
+        Album("Peter", "Rumours", "Fleetwood Mac", 1977),
+        Album("Lisa", "Hotel California", "Eagles", 1976),
+        Album("Tom", "Led Zeppelin IV", "Led Zeppelin", 1971),
+        Album("Sarah", "Thriller", "Michael Jackson", 1982),
+        Album("Chris", "Back in Black", "AC/DC", 1980),
+        Album("Emma", "The Wall", "Pink Floyd", 1979),
+        Album("Mike", "Nevermind", "Nirvana", 1991),
+        Album("Julia", "OK Computer", "Radiohead", 1997),
+        Album("Alex", "Appetite for Destruction", "Guns N' Roses", 1987),
+        Album("Nina", "Purple Rain", "Prince", 1984),
+        Album("Ben", "Born to Run", "Bruce Springsteen", 1975),
+        Album("Sophie", "Aja", "Steely Dan", 1977),
+        Album("David", "Pet Sounds", "The Beach Boys", 1966)
+    )
+
+    var successCount = 0
+    var errorCount = 0
+
+    println("Füge ${testAlbums.size} Testdatensätze hinzu...")
+    println()
+
+    for ((index, album) in testAlbums.withIndex()) {
+        try {
+            val response: HttpResponse = client.post("$BASE_URL/records") {
+                contentType(ContentType.Application.Json)
+                setBody(album)
+            }
+
+            if (response.status.isSuccess()) {
+                successCount++
+                println("✓ ${index + 1}/${testAlbums.size} - ${album.title} by ${album.artist} (Owner: ${album.owner})")
+            } else {
+                errorCount++
+                println("✗ ${index + 1}/${testAlbums.size} - Fehler bei ${album.title}: Status ${response.status}")
+            }
+
+        } catch (e: Exception) {
+            errorCount++
+            println("✗ ${index + 1}/${testAlbums.size} - Exception bei ${album.title}: ${e.message}")
+        }
+
+        // Kleine Pause zwischen den Requests
+        kotlinx.coroutines.delay(100)
+    }
+
+    println()
+    println("=== Zusammenfassung ===")
+    println("Erfolgreich hinzugefügt: $successCount")
+    println("Fehler: $errorCount")
+    println("Gesamt: ${testAlbums.size}")
 }
