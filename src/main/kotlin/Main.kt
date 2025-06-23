@@ -217,7 +217,7 @@ suspend fun deleteRecord(client: HttpClient) {
             HttpStatusCode.NoContent -> println("Record erfolgreich gelöscht!")
             HttpStatusCode.NotFound -> println("Record nicht gefunden!")
             HttpStatusCode.Forbidden -> println("Nur der Owner darf den Record löschen!")
-            else -> println("⚠️ Unerwarteter Status Code")
+            else -> println("Unerwarteter Status Code")
         }
     } catch (e: Exception) {
         println("Fehler beim Löschen: ${e.message}")
