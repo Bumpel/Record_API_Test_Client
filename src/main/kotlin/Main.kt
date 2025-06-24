@@ -6,7 +6,10 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.jackson.*
 import com.fasterxml.jackson.databind.*
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import io.ktor.http.*
+import java.io.File
 
 // BASE_URL Variable - hier können Sie die URL ändern
 const val BASE_URL = "http://127.0.0.1:8100"
@@ -36,8 +39,6 @@ suspend fun main() {
         }
     }
 
-
-
     println("=== Record API Test Client ===")
     println("Verbindung zu $BASE_URL")
     println()
@@ -55,7 +56,8 @@ suspend fun main() {
             4 -> updateRecord(client)
             5 -> deleteRecord(client)
             6 -> fillDatabaseWithTestData(client)
-            7 -> {
+            7 -> fillDatabaseFromFile(client)
+            8 -> {
                 println("Auf Wiedersehen!")
                 break
             }
@@ -75,7 +77,8 @@ fun showMenu() {
     println("4. Record aktualisieren (PUT)")
     println("5. Record löschen (DELETE)")
     println("6. Datenbank mit Testdaten füllen")
-    println("7. Beenden")
+    println("7. Testdaten aus CSV-Datei laden")
+    println("8. Beenden")
     println()
 }
 
@@ -252,13 +255,127 @@ suspend fun fillDatabaseWithTestData(client: HttpClient) {
         Album("David", "Pet Sounds", "The Beach Boys", 1966)
     )
 
+    uploadAlbums(client, testAlbums)
+}
+
+suspend fun fillDatabaseFromFile(client: HttpClient) {
+    println("=== Testdaten aus CSV-Datei laden ===")
+
+    val resourcesPath = "src/main/resources"
+    val resourcesDir = File(resourcesPath)
+
+    if (!resourcesDir.exists()) {
+        println("Resources-Verzeichnis '$resourcesPath' nicht gefunden!")
+        println("Bitte erstellen Sie das Verzeichnis und legen Sie dort eine CSV-Datei ab.")
+        return
+    }
+
+    // Alle CSV-Dateien im resources-Verzeichnis finden
+    val csvFiles = resourcesDir.listFiles { _, name ->
+        name.endsWith(".csv", ignoreCase = true)
+    }?.toList() ?: emptyList()
+
+    if (csvFiles.isEmpty()) {
+        println("Keine CSV-Dateien im Verzeichnis '$resourcesPath' gefunden!")
+        println("Bitte legen Sie eine CSV-Datei mit folgendem Format ab:")
+        println("owner,title,artist,year")
+        println("\"Max\",\"The Dark Side of the Moon\",\"Pink Floyd\",1973")
+        return
+    }
+
+    println("Verfügbare CSV-Dateien:")
+    csvFiles.forEachIndexed { index, file ->
+        println("${index + 1}. ${file.name}")
+    }
+    println()
+
+    print("Wählen Sie eine Datei (1-${csvFiles.size}): ")
+    val choice = readLine()?.toIntOrNull()
+
+    if (choice == null || choice < 1 || choice > csvFiles.size) {
+        println("Ungültige Auswahl.")
+        return
+    }
+
+    val selectedFile = csvFiles[choice - 1]
+
+    try {
+        val albums = loadFromCsv(selectedFile)
+
+        if (albums.isEmpty()) {
+            println("Keine gültigen Datensätze in der Datei gefunden.")
+            return
+        }
+
+        println("${albums.size} Datensätze aus '${selectedFile.name}' geladen.")
+        uploadAlbums(client, albums)
+
+    } catch (e: Exception) {
+        println("Fehler beim Laden der Datei: ${e.message}")
+    }
+}
+
+fun loadFromJson(file: File): List<Album> {
+    val mapper = jacksonObjectMapper()
+    return try {
+        val jsonText = file.readText()
+        mapper.readValue<List<Album>>(jsonText)
+    } catch (e: Exception) {
+        println("Fehler beim Parsen der JSON-Datei: ${e.message}")
+        emptyList()
+    }
+}
+
+fun loadFromCsv(file: File): List<Album> {
+    return try {
+        val lines = file.readLines()
+        if (lines.isEmpty()) return emptyList()
+
+        val albums = mutableListOf<Album>()
+
+        // Skip header if present
+        val dataLines = if (lines.first().contains("owner", ignoreCase = true) ||
+            lines.first().contains("title", ignoreCase = true)) {
+            lines.drop(1)
+        } else {
+            lines
+        }
+
+        for ((lineIndex, line) in dataLines.withIndex()) {
+            val parts = line.split(",").map { it.trim().removeSurrounding("\"") }
+
+            if (parts.size >= 4) {
+                try {
+                    val album = Album(
+                        owner = parts[0],
+                        title = parts[1],
+                        artist = parts[2],
+                        year = parts[3].toInt()
+                    )
+                    albums.add(album)
+                } catch (e: Exception) {
+                    println("Warnung: Zeile ${lineIndex + 2} konnte nicht geparst werden: $line")
+                }
+            } else {
+                println("Warnung: Zeile ${lineIndex + 2} hat nicht genügend Spalten: $line")
+            }
+        }
+
+        albums
+    } catch (e: Exception) {
+        println("Fehler beim Parsen der CSV-Datei: ${e.message}")
+        emptyList()
+    }
+}
+
+suspend fun uploadAlbums(client: HttpClient, albums: List<Album>) {
     var successCount = 0
     var errorCount = 0
 
-    println("Füge ${testAlbums.size} Testdatensätze hinzu...")
+    println("Füge ${albums.size} Datensätze hinzu...")
     println()
 
-    for ((index, album) in testAlbums.withIndex()) {
+    for ((index, album) in albums.withIndex()) {
         try {
             val response: HttpResponse = client.post("$BASE_URL/records") {
                 contentType(ContentType.Application.Json)
@@ -267,15 +384,15 @@ suspend fun fillDatabaseWithTestData(client: HttpClient) {
 
             if (response.status.isSuccess()) {
                 successCount++
-                println("✓ ${index + 1}/${testAlbums.size} - ${album.title} by ${album.artist} (Owner: ${album.owner})")
+                println("✓ ${index + 1}/${albums.size} - ${album.title} by ${album.artist} (Owner: ${album.owner})")
             } else {
                 errorCount++
-                println("✗ ${index + 1}/${testAlbums.size} - Fehler bei ${album.title}: Status ${response.status}")
+                println("✗ ${index + 1}/${albums.size} - Fehler bei ${album.title}: Status ${response.status}")
             }
 
         } catch (e: Exception) {
             errorCount++
-            println("✗ ${index + 1}/${testAlbums.size} - Exception bei ${album.title}: ${e.message}")
+            println("✗ ${index + 1}/${albums.size} - Exception bei ${album.title}: ${e.message}")
         }
 
         // Kleine Pause zwischen den Requests
@@ -286,5 +403,5 @@ suspend fun fillDatabaseWithTestData(client: HttpClient) {
     println("=== Zusammenfassung ===")
     println("Erfolgreich hinzugefügt: $successCount")
     println("Fehler: $errorCount")
-    println("Gesamt: ${testAlbums.size}")
+    println("Gesamt: ${albums.size}")
 }
